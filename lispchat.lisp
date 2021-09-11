@@ -14,13 +14,11 @@
 
 ;; Convert an arbitrary integer into a sequence of bytes
 (defun int-to-bits (i)
-  (let ((sign (if (> i 0) 1 0))                    ;; Reserve one bit to denote positive/negative
-        (bits (recurse-collect-bits (abs i) '()))) ;; Get bits from the absolute value of input
-    (cons sign bits)))                             ;; Prepend sign to bits
+  (recurse-collect-bits (abs i) '())) ;; Get bits from the absolute value of input
 
 ;; Recursively pad a list to a desired length with a desired pad item
 (defun pad-list (desired-length pad collector)
-  (if (>= desired-length (length collector))             ;; If the desired length is >= actual length
+  (if (<= desired-length (length collector))             ;; If the desired length is >= actual length
     collector                                            ;; Return the collector
     (pad-list desired-length pad (cons pad collector)))) ;; Else pad and recurse
 
@@ -28,8 +26,9 @@
 (defun encode-arbitrary-int (integer)
   (let* ((bit-length-as-bits (int-to-bits (integer-length integer))) ;; Get the bit length
          (padded-bit-length  (pad-list 8 0 bit-length-as-bits))      ;; Pad it to 8 to standardize size
+         (sign               (if (< 0 integer) 1 0))                 ;; Determine sign-bit
          (integer-bits       (int-to-bits integer)))                 ;; Get the bits of the number
-    (concatenate 'list padded-bit-length integer-bits)))             ;; Concatenate length as bits and real bits
+    (concatenate 'list padded-bit-length (list sign) integer-bits))) ;; Concatenate length as bits and real bits
 
 ;; Recursively turn a list of bits into an integer
 (defun recurse-decode-int (len bits collector)
@@ -46,25 +45,30 @@
 
 ;; Decode an encoded integer of arbitrary length
 (defun decode-arbitrary-int (bits)
-  (if (equalp (decode-int (subseq bits 0 8)) 0)                 ;; If the length of the encoded int is zero
-    0                                                           ;; Return early
-    (let ((sign (if (equalp 0 (nth 9 bits)) -1 1))              ;; Otherwise, extract the sign bit
-          (integer (decode-int (subseq bits 9 (length bits))))) ;; Extract the integer bits and decode
-      (* sign integer))))                                       ;; Multiply the decoded int by 1 or -1
+  (let ((int-length (decode-int (subseq bits 0 8))))                 ;; Extract length of encoded int
+    (if (equalp int-length 0)                                        ;; If the length of the encoded int is zero
+      0                                                              ;; Return early
+      (let ((sign (if (equalp 0 (nth 9 bits)) -1 1))                 ;; Otherwise, extract the sign bit
+            (integer (decode-int (subseq bits 9 (+ 9 int-length))))) ;; Extract the integer bits and decode
+        (* sign integer)))))                                         ;; Multiply the decoded int by 1 or -1
 
 ;; Encode a string as a list of integers
 (defun encode-string (string)
-  (map
-   'list
-   (lambda (c) (encode-arbitrary-int (char-code c)))
-   string))
+  (mapcan (lambda (c) (encode-arbitrary-int (char-code c))) (coerce string 'list)))
 
-;; Decode a string
-(defun decode-string (string-bits)
-  (map
-   'string
-   (lambda (bits) (code-char (decode-arbitrary-int bits)))
-   string-bits))
+;; Recursively consume integers from bits and convert them to characters collected in coll
+(defun recurse-decode-string (bits coll)
+  (if bits
+    (let* ((first-int-length (decode-int (subseq bits 0 8)))                         ;; Length of the first int
+           (first-int-bits   (+ 9 first-int-length))                                 ;; Total bit length of the first int
+           (first-int        (decode-arbitrary-int (subseq bits 0 first-int-bits)))  ;; Decoded first int
+           (remaining-bits   (subseq bits first-int-bits (length bits))))            ;; Bits remaining after decoding
+      (decs remaining-bits (concatenate 'string coll (list (code-char first-int))))) ;; Recurse, collecting char
+    coll))                                                                           ;; Return collected string
+
+;; Decode string from list of bits
+(defun decode-string (bits)
+  (recurse-decode-string bits ""))
 
 ;;;; Packet registries
 
