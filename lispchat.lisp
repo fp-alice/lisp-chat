@@ -145,8 +145,13 @@
          (packet-discriminator (position packet-id registry))
          (packet-schema        (getf registry packet-id))
          (encoded-packet       (mapcan (field-encoder packet-schema) packet-data)))
-   (concatenate 'list (encode-arbitrary-int packet-discriminator) encoded-packet)))
+   (concatenate 'list (pad-list-left 8 0 (int-to-bits packet-discriminator)) encoded-packet)))
 
+(defun decode-packet (bits registry)
+  (let* ((packet-id  (decode-arbitrary-int (subseq bits 0 9)))
+         (packet-key (getf registry (nth packet-id registry))))
+    (print packet-key)))
+  
 (defun recurse-partition (list len coll)
   (if list
     (recurse-partition
@@ -158,11 +163,9 @@
 (defun partition (list len)
   (recurse-partition list len '()))
 
-
 (defun bits->bytes (bits)
   (let ((byte-bit-lists (partition bits 8)))
     (map 'list #'decode-int byte-bit-lists)))
-  
 
 (defun pad-bits-and-make-bytes (bits)
   (let* ((pad-length  (next-divisible (length bits) 8))
@@ -173,3 +176,10 @@
 (defun bytes->bits (bytes)
   (let ((bits-list (map 'list #'int-to-bits bytes)))
     (mapcan (lambda (bits) (pad-list-left 8 0 bits)) bits-list)))
+
+(defun test ()
+  (let* ((packet  (create-packet :connect '((:username "calamity"))))
+         (encoded (encode-packet packet client-packet-registry))
+         (bytes   (pad-bits-and-make-bytes encoded)))
+    (print encoded)
+    (print (bytes->bits bytes))))
