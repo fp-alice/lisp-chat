@@ -6,6 +6,8 @@
   :license  "Specify license here"
   :version "0.0.1"
   :serial t
-  :depends-on (#:usocket #:lisp-binary)
+  :depends-on (#:usocket)
   :components ((:file "package")
-               (:file "lispchat")))
+               (:file "lispchat")
+               (:file "utils")
+               (:file "bits")))
