@@ -6,10 +6,13 @@
 
 (defconstant client-packet-registry
   (list
-   :connect        '(:username :string)
-   :direct-message '(:username :string
-                     :message :string)
-   :message        '(:message :string)
+   :connect        '(:fields (:username)
+                     :schema (:username :string))
+   :direct-message '(:fields (:username :message)
+                     :schema (:username :string
+                              :message  :string))
+   :message        '(:fields (:message)
+                     :schema (:message :string))
    :disconnect     '()))
 
 (defconstant server-packet-registry
@@ -25,33 +28,43 @@
 (defun create-packet (packet-type packet-data)
   (list :packet-id packet-type :data packet-data))
 
-(defun encode-packet-field (packet-schema field-data)
-  (let* ((field-name  (first field-data))
-         (field-value (second field-data))
-         (field-type  (getf packet-schema field-name)))
-    (generic-encode field-type field-value)))
+(defun encode-packet-field (packet-schema field-data bit-queue)
+  (let ((field-name  (first field-data))
+        (field-value (second field-data)))
+    (push-generic-queue bit-queue (getf packet-schema field-name) field-value)))
 
-(defun field-encoder (packet-schema)
-  (lambda (fields)
-    (encode-packet-field packet-schema fields)))
+(defun field-encoder (packet-schema bit-queue)
+  (lambda (pair) (encode-packet-field packet-schema pair bit-queue)))
 
-(defun encode-packet (packet registry)
+(defun encode-packet (registry packet bit-queue)
   (let* ((packet-id            (getf packet :packet-id))
          (packet-data          (getf packet :data))
          (packet-discriminator (position packet-id registry))
-         (packet-schema        (getf registry packet-id))
-         (encoded-packet       (mapcan (field-encoder packet-schema) packet-data)))
-   (concatenate 'list (pad-list-left 8 0 (int->bits packet-discriminator)) encoded-packet)))
+         (packet-schema        (getf (getf registry packet-id) :schema)))
+    (push-int-queue bit-queue packet-discriminator)
+    (loop for pair in packet-data
+          do (funcall (field-encoder packet-schema bit-queue) pair))))
 
-(defun decode-packet (bits registry)
-  (let* ((packet-id  (decode-arbitrary-int (subseq bits 0 9)))
-         (packet-key (getf registry (nth packet-id registry))))
-    (print packet-key)))
+(defun decode-fields (bit-queue packet-schema packet-fields)
+  (loop for field in packet-fields
+        collect (list field (pop-generic-queue bit-queue (getf packet-schema field)))))
 
+(defun decode-packet (registry bit-queue)
+  (let* ((packet-id     (pop-int-queue bit-queue))
+         (packet-key    (getf registry (nth packet-id registry)))
+         (packet-fields (getf packet-key :fields))
+         (packet-schema (getf packet-key :schema))
+         (packet-data   (decode-fields bit-queue packet-schema packet-fields)))
+    (create-packet (nth packet-id registry) packet-data)))
+
+(defun test2 ()
+  (let ((packet    (create-packet :connect '((:username "calamity"))))
+        (bit-queue (make-instance 'bit-queue)))
+    (encode-packet client-packet-registry packet bit-queue)
+    (decode-packet client-packet-registry bit-queue)))
 
 (defun test ()
-  (let* ((packet  (create-packet :connect '((:username "calamity"))))
-         (encoded (encode-packet packet client-packet-registry))
-         (bytes   (pad-bits-and-make-bytes encoded)))
-    (print encoded)
-    (print (bytes->bits bytes))))
+  (let* ((packet    (create-packet :connect '((:username "calamity"))))
+         (bit-queue (make-instance 'bit-queue)))
+    (encode-packet client-packet-registry packet bit-queue)
+    bit-queue))

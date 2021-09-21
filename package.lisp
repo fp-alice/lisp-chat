@@ -1,4 +1,4 @@
 ;;;; package.lisp
 
 (defpackage #:lispchat
-  (:use #:cl #:usocket))
+  (:use #:cl #:usocket #:bit-smasher))
