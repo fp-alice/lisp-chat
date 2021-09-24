@@ -10,4 +10,7 @@
   :components ((:file "package")
                (:file "lispchat")
                (:file "utils")
-               (:file "bits")))
+               (:file "bits")
+               (:file "server")
+               (:file "packets")
+               (:file "client")))
