@@ -4,7 +4,6 @@
 
 (defconstant bit-queue (make-instance 'bit-queue))
 
-
 (defun send-client-packet ())
 
 (defun send-connect (stream)
