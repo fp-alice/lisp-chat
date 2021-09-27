@@ -8,9 +8,9 @@
   :serial t
   :depends-on (#:usocket #:bit-smasher)
   :components ((:file "package")
+               (:file "packets")
                (:file "lispchat")
                (:file "utils")
                (:file "bits")
                (:file "server")
-               (:file "packets")
                (:file "client")))

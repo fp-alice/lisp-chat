@@ -15,8 +15,10 @@
 
 (defconstant server-packet-registry
   (list
-   :message
-   :terminate))
+   :message   '(:fields (:username :message)
+                :schema (:username :string
+                         :message  :string))
+   :terminate '()))
 
 ;; EXAMPLE (create-packet :connect '((:username "calamity")))
 ;; NEEDS TO BE A LIST OF LISTS OF FIELDS! CANNOT BE 1D
@@ -80,5 +82,17 @@
          (packet-info (getf registry packet-name))                           ;; Get the packet information from registry
          (fields      (getf packet-info :fields))                            ;; Fields in packet
          (schema      (getf packet-info :schema))                            ;; Field types
-         (packet-data (mapcan (read-packet-field stream schema) fields))) ;; Read each field and associate it with its name
+         (packet-data (mapcan (read-packet-field stream schema) fields)))    ;; Read each field and associate it with its name
     (create-packet packet-name packet-data)))                                ;; Assemble a fully formed packet to return
+
+(defun write-queue-to-stream (queue stream)
+  (loop for b in (queue->bytes queue)
+        do (write-byte b stream)
+        finally (force-output stream)))
+
+(defun write-packet-to-queue (queue registry packet-id fields)
+  (encode-packet registry (create-packet packet-id fields) queue))
+
+(defun send-packet (queue stream registry packet-id fields)
+  (write-packet-to-queue queue registry packet-id fields)
+  (write-queue-to-stream queue stream))
